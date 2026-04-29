@@ -1,52 +1,109 @@
 import { useState, useEffect } from 'react';
-import type { Device, Alert } from './types';
+import type { Device, Alert, ThreatIntelType, AuditLogType } from './types';
 
-const MOCK_DEVICES: Device[] = [
-  { device_id: 'MED-ESP32-001', device_type: 'pacemaker_monitor', status: 'active', last_seen: new Date().toISOString() },
-  { device_id: 'MED-RPI-042', device_type: 'mri_controller', status: 'active', last_seen: new Date().toISOString() },
-  { device_id: 'MED-CUSTOM-X9', device_type: 'iv_pump', status: 'active', last_seen: new Date().toISOString() },
-  { device_id: 'MED-SENSOR-11', device_type: 'vitals_tracker', status: 'active', last_seen: new Date().toISOString() },
-];
+// Let's assume the backend is hosted at localhost:8000 for this prototype
+const BACKEND_REST_URL = 'http://localhost:8000';
+const BACKEND_WS_URL = 'ws://localhost:8000/ws';
 
 export const useStore = () => {
-  const [devices, setDevices] = useState<Device[]>(MOCK_DEVICES);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [threatIntel, setThreatIntel] = useState<ThreatIntelType[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogType[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Local Simulation for Demo
-    let alertId = 1;
-    const interval = setInterval(() => {
-      // Simulate real-time network packets
-      window.dispatchEvent(new CustomEvent('live-network-event'));
-
-      // Occasional anomalies
-      if (Math.random() > 0.85) {
-        const isDeviceAnomaly = Math.random() > 0.5;
-        const targetDevice = MOCK_DEVICES[Math.floor(Math.random() * MOCK_DEVICES.length)];
-        
-        const newAlert: Alert = {
-          id: alertId++,
-          device_id: targetDevice.device_id,
-          type: isDeviceAnomaly ? 'Device Behavior Anomaly' : 'Network Anomaly',
-          severity: isDeviceAnomaly ? 'critical' : 'high',
-          description: isDeviceAnomaly ? 'Abnormal device CPU and Temp metrics detected by Autoencoder.' : 'Unusual traffic patterns detected by LSTM isolation forest.',
-          timestamp: new Date().toISOString(),
-          is_resolved: false
-        };
-
-        setAlerts(prev => [newAlert, ...prev].slice(0, 50));
-
-        if (newAlert.severity === 'critical') {
-            setDevices(prev => prev.map(d => 
-                d.device_id === targetDevice.device_id ? {...d, status: 'quarantined'} : d
-            ));
+    // 1. Fetch initial state
+    const fetchInitialData = async () => {
+      try {
+        const [devicesRes, alertsRes] = await Promise.all([
+          fetch(`${BACKEND_REST_URL}/devices/`),
+          fetch(`${BACKEND_REST_URL}/alerts/`)
+        ]);
+        if (devicesRes.ok) {
+          const devs = await devicesRes.json();
+          setDevices(devs);
         }
+        if (alertsRes.ok) {
+          const alrts = await alertsRes.json();
+          // Sort alerts newest first
+          alrts.sort((a: Alert, b: Alert) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          setAlerts(alrts.slice(0, 50));
+        }
+      } catch (err) {
+        console.error("Failed to fetch initial data:", err);
+      } finally {
+        setLoading(false);
       }
-    }, 2000);
+    };
+    
+    fetchInitialData();
 
-    return () => clearInterval(interval);
+    // 2. Setup WebSocket for live updates
+    const ws = new WebSocket(BACKEND_WS_URL);
+    
+    ws.onopen = () => {
+      console.log("Connected to MediSentinel live WebSocket");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        const { topic, data } = msg;
+
+        // Custom event for visualizing network blips
+        window.dispatchEvent(new CustomEvent('live-network-event'));
+
+        if (topic === 'devices/auto_registered') {
+          // New device registered
+          setDevices(prev => {
+            if (prev.some(d => d.device_id === data.device_id)) return prev;
+            return [...prev, data];
+          });
+        }
+        else if (topic === 'devices/telemetry') {
+           // Live data ping - just update last_seen
+           setDevices(prev => prev.map(d => 
+             d.device_id === data.device_id 
+              ? { ...d, last_seen: new Date().toISOString() } 
+              : d
+           ));
+        }
+        else if (topic === 'alerts' || topic === 'anomalies') {
+            const isDeviceAnomaly = data.type?.includes("Device") || data.severity === "critical";
+            
+            const newAlert: Alert = {
+              id: data.id || Math.floor(Math.random() * 1000000),
+              device_id: data.device_id || "UNKNOWN",
+              type: data.type || (isDeviceAnomaly ? 'Device Behavior Anomaly' : 'Network Anomaly'),
+              severity: data.severity || (isDeviceAnomaly ? 'critical' : 'high'),
+              description: data.description || 'Abnormal behavior detected by AI Agents.',
+              timestamp: data.timestamp || new Date().toISOString(),
+              is_resolved: false
+            };
+
+            setAlerts(prev => [newAlert, ...prev].slice(0, 50));
+
+            // Auto-quarantine on critical
+            if (newAlert.severity === 'critical') {
+                setDevices(prev => prev.map(d => 
+                    d.device_id === newAlert.device_id ? {...d, status: 'quarantined'} : d
+                ));
+            }
+        }
+      } catch (e) {
+        console.error("Failed parsing WS message", e);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
-  return { devices, alerts, loading };
+  return { devices, alerts, threatIntel, auditLogs, loading };
 };

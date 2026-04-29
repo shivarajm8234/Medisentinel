@@ -60,6 +60,40 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: medisentinel-postgres
+    environment:
+      POSTGRES_USER: medi_user
+      POSTGRES_PASSWORD: medi_password
+      POSTGRES_DB: medisentinel
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - medisentinel-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medi_user -d medisentinel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: medisentinel-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - medisentinel-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ─── Backend ──────────────────────────────────────────────────────
   backend:
     build:
@@ -71,6 +105,10 @@ services:
         condition: service_healthy
       mqtt-broker:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "8000:8000"
     environment:
@@ -78,10 +116,10 @@ services:
       - MQTT_BROKER_HOST=mqtt-broker
       - MQTT_BROKER_PORT=1883
       - SECRET_KEY=${SECRET_KEY:-medisentinel_super_secret_key_change_in_prod}
-      - DATABASE_URL=sqlite:///./medisentinel.db
+      - DATABASE_URL=postgresql+asyncpg://medi_user:medi_password@postgres:5432/medisentinel
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./backend:/app
-      - backend-data:/app/data
     networks:
       - medisentinel-net
     restart: unless-stopped
@@ -97,9 +135,12 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
+      postgres:
+        condition: service_healthy
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - BACKEND_URL=http://backend:8000
+      - DATABASE_URL=postgresql+asyncpg://medi_user:medi_password@postgres:5432/medisentinel
     volumes:
       - ./agents:/app
     networks:
@@ -123,7 +164,8 @@ services:
 volumes:
   mosquitto-data:
   mosquitto-logs:
-  backend-data:
+  postgres-data:
+  redis-data:
 
 networks:
   medisentinel-net:

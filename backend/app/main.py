@@ -5,7 +5,7 @@ import asyncio
 import json
 
 from app.database import init_db, get_db
-from app.routers import auth, devices, alerts
+from app.routers import auth, devices, alerts, compliance, threat_intel, ml_models
 from app.ws_manager import ws_manager
 from app.kafka_client import consume_kafka_alerts
 from app.mqtt_client import run_mqtt_bridge
@@ -27,6 +27,9 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(devices.router)
 app.include_router(alerts.router)
+app.include_router(compliance.router)
+app.include_router(threat_intel.router)
+app.include_router(ml_models.router)
 
 
 @app.on_event("startup")
