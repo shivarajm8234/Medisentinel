@@ -6,7 +6,7 @@ interface DeviceMapProps {
   devices: Device[];
 }
 
-const DeviceMap: React.FC<DeviceMapProps> = ({ devices }) => {
+const DeviceMap: React.FC<DeviceMapProps> = ({ devices: _devices }) => {
   // Mock positioning for visual effect
   return (
     <div className="glass-panel" style={{ overflow: 'hidden' }}>

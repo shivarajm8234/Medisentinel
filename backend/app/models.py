@@ -52,3 +52,40 @@ class Alert(Base):
     is_resolved = Column(Boolean, default=False)
     resolved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class IncidentRecord(Base):
+    __tablename__ = "incident_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, ForeignKey("alerts.id"))
+    device_id = Column(String, index=True)
+    action_taken = Column(String, nullable=False)
+    action_status = Column(String, nullable=False)  # pending, success, failed, overridden
+    justification = Column(String)
+    analyst_override = Column(Boolean, default=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ThreatIntel(Base):
+    __tablename__ = "threat_intel"
+
+    id = Column(Integer, primary_key=True, index=True)
+    indicator = Column(String, unique=True, index=True, nullable=False)
+    type = Column(String, nullable=False)  # ip, hash, domain
+    confidence = Column(Integer, default=50)
+    source_feed = Column(String)
+    date_added = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String, nullable=False)
+    actor = Column(String, nullable=False)  # system, username
+    target = Column(String)
+    details = Column(JSON, default={})
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    previous_hash = Column(String, nullable=False)
+    current_hash = Column(String, nullable=False, unique=True)

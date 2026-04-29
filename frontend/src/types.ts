@@ -15,3 +15,23 @@ export interface Alert {
   timestamp: string;
   is_resolved: boolean;
 }
+
+export interface ThreatIntelType {
+  id: number;
+  indicator: string;
+  type: string;
+  confidence: number;
+  source_feed: string;
+  date_added: string;
+}
+
+export interface AuditLogType {
+  id: number;
+  action: string;
+  actor: string;
+  target: string;
+  details: any;
+  timestamp: string;
+  previous_hash: string;
+  current_hash: string;
+}

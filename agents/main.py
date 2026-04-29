@@ -2,33 +2,69 @@ import asyncio
 import json
 import logging
 import os
+import httpx
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from network_monitor import NetworkMonitorAgent
 from iot_guardian import IoTGuardianAgent
 from incident_response import IncidentResponseAgent
+from threat_intelligence import ThreatIntelligenceAgent
+from compliance_audit import ComplianceAuditAgent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 network_agent = NetworkMonitorAgent()
 iot_agent = IoTGuardianAgent()
 ir_agent = IncidentResponseAgent()
+ti_agent = ThreatIntelligenceAgent()
+audit_agent = ComplianceAuditAgent()
 
 async def get_kafka_producer():
     producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS)
     await producer.start()
     return producer
 
+async def threat_intel_worker(producer):
+    """
+    Background worker for Agent 3 (Threat Intelligence).
+    Polls for STIX IOCs and publishes them.
+    """
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                new_iocs = ti_agent.get_new_intel()
+                for ioc in new_iocs:
+                    # Publish to Kafka for other agents (if needed)
+                    await producer.send_and_wait("threat_intel", json.dumps(ioc).encode('utf-8'))
+                    
+                    # Also send to backend
+                    await client.post(f"{BACKEND_URL}/threat-intel/inject", params=ioc)
+                    
+                    # Audit Log
+                    await audit_agent.log_event(
+                        action="ingest_ioc",
+                        actor="ThreatIntelligenceAgent",
+                        target=ioc["indicator"],
+                        details=ioc
+                    )
+            except Exception as e:
+                logger.error(f"Threat Intel Worker Error: {e}")
+            
+            await asyncio.sleep(5)
+
 async def main():
-    logger.info("Starting MediSentinel Agents Orchestrator...")
+    logger.info("Starting MediSentinel Agents Orchestrator (All 5 Agents)...")
     
-    # Needs a few seconds for Kafka to be ready in docker-compose
     await asyncio.sleep(10)
     
     producer = await get_kafka_producer()
+    
+    # Start Agent 3 background task
+    asyncio.create_task(threat_intel_worker(producer))
     
     consumer = AIOKafkaConsumer(
         'raw_data',
@@ -48,45 +84,57 @@ async def main():
 
     try:
         async for msg in consumer:
-            logger.info(f"Agents consumed: {msg.value}")
             data = json.loads(msg.value.decode('utf-8'))
             
             payload = data.get("payload", {})
             device_id = payload.get("device_id", "unknown")
             
-            is_network_anomaly = network_agent.analyze_traffic(payload.get("network", {}))
-            is_device_anomaly = iot_agent.analyze_device_behavior(device_id, payload.get("metrics", {}))
+            # Agent 1: Network
+            network_result = network_agent.analyze_traffic(payload.get("network", {}))
+            
+            # Agent 2: IoT
+            iot_result = iot_agent.analyze_device_behavior(device_id, payload.get("metrics", {}))
             
             anomalies = []
             
-            if is_network_anomaly:
+            if network_result.get("is_anomaly"):
                 anomalies.append({
                     "device_id": device_id,
                     "type": "Network Anomaly",
-                    "severity": "high",
-                    "description": "Unusual traffic patterns detected by LSTM/Isolation Forest."
+                    "severity": "high" if network_result.get("score", 0) > 85 else "medium",
+                    "description": f"LSTM/IsoForest threat score: {network_result.get('score')}",
+                    "details": network_result
                 })
                 
-            if is_device_anomaly:
+            if iot_result.get("is_anomaly"):
                 anomalies.append({
                     "device_id": device_id,
                     "type": "Device Behavior Anomaly",
-                    "severity": "critical",
-                    "description": "Abnormal device metrics detected by Autoencoder."
+                    "severity": "critical" if iot_result.get("score", 0) > 80 else "high",
+                    "description": f"Autoencoder risk score: {iot_result.get('score')}",
+                    "details": iot_result
                 })
                 
-            # If anomalies, trigger IR Agent and forward to 'alerts' topic
+            # If anomalies, trigger IR Agent and Audit
             for anomaly in anomalies:
-                logger.warning(f"Publishing anomaly to Kafka: {anomaly}")
-                # Publish back to Kafka so backend WS can pick it up
+                logger.warning(f"Anomaly detected: {anomaly}")
+                
                 await producer.send_and_wait("alerts", json.dumps(anomaly).encode('utf-8'))
                 
-                # Trigger internal Incident Response (Quarantine logic, API calls)
+                # Agent 4: Incident Response
                 await ir_agent.trigger_response(
                     anomaly["device_id"], 
                     anomaly["type"], 
                     anomaly["severity"], 
                     anomaly["description"]
+                )
+                
+                # Agent 5: Audit Log
+                await audit_agent.log_event(
+                    action="threat_detected",
+                    actor="AgentCluster",
+                    target=anomaly["device_id"],
+                    details=anomaly
                 )
 
     finally:

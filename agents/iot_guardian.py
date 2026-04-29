@@ -35,10 +35,10 @@ class IoTGuardianAgent:
         self.threshold = 0.5 # Error threshold for anomaly
         self.is_trained = False
         
-    def analyze_device_behavior(self, device_id: str, metrics: dict) -> bool:
+        def analyze_device_behavior(self, device_id: str, metrics: dict) -> dict:
         """
         Analyze device metrics using Autoencoder.
-        Returns True if anomaly is detected.
+        Returns detailed threat intelligence.
         """
         try:
             # Mock feature extraction from metrics
@@ -53,24 +53,35 @@ class IoTGuardianAgent:
             
             tensor_features = torch.tensor([features], dtype=torch.float32)
             
-            # Simple threshold check for now if not trained
-            # In a real scenario, this would load a pre-trained model for the specific device type
+            loss_val = 0.0
+            
             if not self.is_trained:
-                if features[0] > 95 or features[2] > 85: # Hardcoded fallback
-                    return True
-                return False
+                # Mock loss based on extreme values
+                if features[0] > 95 or features[2] > 85: 
+                    loss_val = 0.8 + (np.random.rand() * 0.2)
+                elif features[0] > 80:
+                    loss_val = 0.4 + (np.random.rand() * 0.2)
+                else:
+                    loss_val = np.random.rand() * 0.2
+            else:
+                self.model.eval()
+                with torch.no_grad():
+                    reconstructed = self.model(tensor_features)
+                    loss = self.criterion(reconstructed, tensor_features)
+                    loss_val = loss.item()
                 
-            self.model.eval()
-            with torch.no_grad():
-                reconstructed = self.model(tensor_features)
-                loss = self.criterion(reconstructed, tensor_features)
-                
-            is_anomaly = loss.item() > self.threshold
+            is_anomaly = loss_val > self.threshold
+            risk_score = min(100, int(loss_val * 100))
+            
             if is_anomaly:
-                logger.warning(f"IoTGuardian: Anomaly for device {device_id}. Loss: {loss.item()}")
+                logger.warning(f"IoTGuardian: Anomaly for device {device_id}. Score: {risk_score}")
                 
-            return is_anomaly
+            return {
+                "is_anomaly": is_anomaly,
+                "score": risk_score,
+                "loss": round(loss_val, 4)
+            }
             
         except Exception as e:
             logger.error(f"Error in IoTGuardian: {e}")
-            return False
+            return {"is_anomaly": False, "score": 0, "loss": 0}

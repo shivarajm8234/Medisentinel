@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///./medisentinel.db"
+    database_url: str = "postgresql+asyncpg://medi_user:medi_password@localhost:5432/medisentinel"
+    redis_url: str = "redis://localhost:6379/0"
 
     # Kafka
     kafka_bootstrap_servers: str = "localhost:9092"
