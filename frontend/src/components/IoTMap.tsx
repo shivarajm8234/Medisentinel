@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Map as MapIcon, Info, HeartPulse, Activity } from 'lucide-react';
 import { useStore } from '../useStore';
-import { Device } from '../types';
+import type { Device } from '../types';
 
 const DEPARTMENTS = [
   { id: 'icu', name: 'Intensive Care Unit (ICU)' },
@@ -93,47 +93,71 @@ const IoTMap: React.FC = () => {
         </h2>
         
         {selectedDevice ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Device ID</label>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedDevice.device_id}</div>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Type</label>
-              <div style={{ textTransform: 'capitalize' }}>{selectedDevice.device_type.replace('_', ' ')}</div>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status</label>
-              <div>
-                <span className={`live-badge`} style={{ color: getDeviceColor(selectedDevice) }}>
-                  {selectedDevice.status.toUpperCase()}
-                </span>
-              </div>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Risk Score</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ flexGrow: 1, height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ width: `${getDeviceRiskScore(selectedDevice)}%`, height: '100%', background: getDeviceColor(selectedDevice) }}></div>
+          (() => {
+            const activeDevice = devices.find(d => d.device_id === selectedDevice.device_id) || selectedDevice;
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Device ID</label>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{activeDevice.device_id}</div>
                 </div>
-                <span>{getDeviceRiskScore(selectedDevice)}/100</span>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Type</label>
+                  <div style={{ textTransform: 'capitalize' }}>{activeDevice.device_type.replace('_', ' ')}</div>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status</label>
+                  <div>
+                    <span className={`live-badge`} style={{ color: getDeviceColor(activeDevice) }}>
+                      {activeDevice.status.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Real-time Telemetry */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Heart Rate</label>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: activeDevice.metadata_json?.heart_rate > 150 ? 'var(--color-danger)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <HeartPulse size={16} color={activeDevice.metadata_json?.heart_rate > 150 ? 'var(--color-danger)' : 'var(--color-primary)'} />
+                      {activeDevice.metadata_json?.heart_rate ? `${activeDevice.metadata_json.heart_rate} BPM` : 'Waiting...'}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>SpO2 Level</label>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: activeDevice.metadata_json?.spo2 < 90 ? 'var(--color-danger)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Activity size={16} color={activeDevice.metadata_json?.spo2 < 90 ? 'var(--color-danger)' : 'var(--color-success)'} />
+                      {activeDevice.metadata_json?.spo2 ? `${activeDevice.metadata_json.spo2}%` : 'Waiting...'}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Risk Score</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ flexGrow: 1, height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: `${getDeviceRiskScore(activeDevice)}%`, height: '100%', background: getDeviceColor(activeDevice) }}></div>
+                    </div>
+                    <span>{getDeviceRiskScore(activeDevice)}/100</span>
+                  </div>
+                </div>
+                
+                <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>Passive Monitoring</label>
+                    <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '40px', height: '20px' }}>
+                      <input type="checkbox" defaultChecked style={{ opacity: 0, width: 0, height: 0 }} />
+                      <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'var(--color-primary)', transition: '.4s', borderRadius: '20px' }}></span>
+                    </label>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    <AlertTriangle size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                    Disabling passive monitoring removes AI protection. Requires CISO approval.
+                  </p>
+                </div>
               </div>
-            </div>
-            
-            <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>Passive Monitoring</label>
-                <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '40px', height: '20px' }}>
-                  <input type="checkbox" defaultChecked style={{ opacity: 0, width: 0, height: 0 }} />
-                  <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'var(--color-primary)', transition: '.4s', borderRadius: '20px' }}></span>
-                </label>
-              </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-                <AlertTriangle size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                Disabling passive monitoring removes AI protection. Requires CISO approval.
-              </p>
-            </div>
-          </div>
+            );
+          })()
         ) : (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '50px' }}>
             Select a device on the map to view details.

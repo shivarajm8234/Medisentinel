@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 class IncidentResponseAgent:
     def __init__(self):
         self.backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+        self.secret_key = os.getenv("SECRET_KEY", "medisentinel_super_secret_key_change_in_prod")
         
     def _decision_tree(self, alert_type: str, severity: str) -> str:
         """
@@ -45,11 +46,14 @@ class IncidentResponseAgent:
             "description": f"{description} | Recommended Action: {action}"
         }
         
+        headers = {
+            "Authorization": f"Bearer {self.secret_key}"
+        }
+        
         async with httpx.AsyncClient() as client:
             try:
-                # Need to use an internal service token or similar in prod
-                response = await client.post(f"{self.backend_url}/alerts/", json=alert_payload)
-                if response.status_code == 200:
+                response = await client.post(f"{self.backend_url}/alerts/", json=alert_payload, headers=headers)
+                if response.status_code == 200 or response.status_code == 201:
                     logger.info("Alert successfully registered in backend.")
                 else:
                     logger.error(f"Failed to register alert: {response.text}")
@@ -59,7 +63,8 @@ class IncidentResponseAgent:
                     logger.warning(f"Autonomous containment: Quarantining device {device_id}")
                     await client.patch(
                         f"{self.backend_url}/devices/{device_id}", 
-                        json={"status": "quarantined"}
+                        json={"status": "quarantined"},
+                        headers=headers
                     )
                 elif action == "block_traffic":
                     logger.warning(f"Autonomous containment: Blocking network traffic for {device_id}")

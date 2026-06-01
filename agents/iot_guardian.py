@@ -35,7 +35,7 @@ class IoTGuardianAgent:
         self.threshold = 0.5 # Error threshold for anomaly
         self.is_trained = False
         
-        def analyze_device_behavior(self, device_id: str, metrics: dict) -> dict:
+    def analyze_device_behavior(self, device_id: str, metrics: dict) -> dict:
         """
         Analyze device metrics using Autoencoder.
         Returns detailed threat intelligence.
@@ -43,12 +43,21 @@ class IoTGuardianAgent:
         try:
             # Mock feature extraction from metrics
             # E.g., cpu_usage, memory, temp, battery, error_rate
+            # Extract heart rate and SpO2, mapping them to autoencoder features if present
+            heart_rate = float(metrics.get('heart_rate', 0))
+            spo2 = float(metrics.get('spo2', 0))
+            
+            # Map anomalous telemetry to anomalous autoencoder dimensions
+            cpu_val = 99.0 if (heart_rate > 130 or (heart_rate > 0 and heart_rate < 50)) else float(metrics.get('cpu', 15.0))
+            temp_val = 90.0 if (heart_rate > 150) else float(metrics.get('temp', 36.5))
+            errors_val = 5.0 if (spo2 > 0 and spo2 < 90) else float(metrics.get('errors', 0))
+            
             features = [
-                float(metrics.get('cpu', 0)),
-                float(metrics.get('mem', 0)),
-                float(metrics.get('temp', 0)),
-                float(metrics.get('batt', 100)),
-                float(metrics.get('errors', 0))
+                cpu_val,
+                float(metrics.get('mem', 35.0)),
+                temp_val,
+                float(metrics.get('batt', metrics.get('battery_level', 100))),
+                errors_val
             ]
             
             tensor_features = torch.tensor([features], dtype=torch.float32)
