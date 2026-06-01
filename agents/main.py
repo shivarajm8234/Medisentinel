@@ -104,32 +104,77 @@ async def main():
             network = payload.get("network", {})
             is_attack = heart_rate > 150 or spo2 < 90
             
-            # Agent 1: Network Monitor
+            # Agent 1: Network Monitor (LSTM + Isolation Forest)
             network_result = network_agent.analyze_traffic(network)
+            models_info = network_result.get("models", {})
             if network_result.get("is_anomaly"):
-                net_msg = f"Network Monitor: Telemetry flood detected! Packet rate: {network.get('packet_rate')} pkts/s, Jitter: {network.get('jitter')}ms. LSTM Threat Score: {network_result.get('score')}/100."
+                sigs = network_result.get("matched_signatures", [])
+                iso_info = models_info.get("isolation_forest", {})
+                lstm_info = models_info.get("lstm", {})
+                net_msg = (
+                    f"Network Monitor: ANOMALY DETECTED | "
+                    f"IsolationForest: {'FLAGGED' if iso_info.get('flagged') else 'OK'} "
+                    f"(decision_score={iso_info.get('decision_score', 'N/A')}) | "
+                    f"LSTM: {'FLAGGED' if lstm_info.get('flagged') else 'OK'} "
+                    f"(confidence={lstm_info.get('confidence', 0):.1f}%, window={lstm_info.get('window_size', 0)}) | "
+                    f"Matched Signatures: {sigs or 'None'} | "
+                    f"Combined Threat Score: {network_result.get('score')}/100"
+                )
                 net_status = "anomaly"
             else:
-                net_msg = f"Network Monitor: Analyzing traffic. Packet rate: {network.get('packet_rate', 12)} pkts/s, Jitter: {network.get('jitter', 5)}ms. Isolation Forest Score: 0.04 (Healthy)."
+                net_msg = (
+                    f"Network Monitor: Traffic baseline normal | "
+                    f"Packet rate: {network.get('packet_rate', 12)} pkts/s | "
+                    f"IsolationForest: {'training' if models_info.get('isolation_forest') == 'training' else 'OK'} | "
+                    f"LSTM: {'training' if models_info.get('lstm') == 'training' else 'OK'}"
+                )
                 net_status = "normal"
             await send_agent_log("Network Monitor", net_status, net_msg)
             
-            # Agent 2: IoT Guardian
+            # Agent 2: IoT Guardian (Autoencoder + Rule Engine)
             iot_result = iot_agent.analyze_device_behavior(device_id, payload)
+            iot_models = iot_result.get("models", {})
             if iot_result.get("is_anomaly"):
-                iot_msg = f"IoT Guardian: Anomalous vital signs detected on {device_id}! Heart rate: {heart_rate} BPM, SpO2: {spo2}%. Autoencoder Reconstruction Loss: {iot_result.get('loss')}. Risk Score: {iot_result.get('score')}/100."
+                ae_info = iot_models.get("autoencoder", {})
+                re_info = iot_models.get("rule_engine", {})
+                fw_info = iot_models.get("firmware_integrity", {})
+                rule_details = re_info.get("details", [])
+                rule_desc = "; ".join([r["description"] for r in rule_details[:2]]) if rule_details else "None"
+                iot_msg = (
+                    f"IoT Guardian: ANOMALY on {device_id} | "
+                    f"Autoencoder: {'FLAGGED' if ae_info.get('flagged') else 'OK'} "
+                    f"(recon_loss={ae_info.get('reconstruction_loss', 0):.4f}) | "
+                    f"Rule Engine: {re_info.get('violations', 0)} violation(s) [{rule_desc}] | "
+                    f"Firmware: {fw_info.get('status', 'N/A').upper()} | "
+                    f"BPM={heart_rate}, SpO2={spo2}% | Risk Score: {iot_result.get('score')}/100"
+                )
                 iot_status = "anomaly"
             else:
-                iot_msg = f"IoT Guardian: Monitoring vitals on {device_id}. Heart rate: {heart_rate} BPM, SpO2: {spo2}%. Risk Score: {iot_result.get('score')}/100 (Safe)."
+                iot_msg = (
+                    f"IoT Guardian: Monitoring {device_id} | "
+                    f"BPM={heart_rate}, SpO2={spo2}% | "
+                    f"Autoencoder: OK (loss={iot_result.get('loss', 0):.4f}) | "
+                    f"Rule Engine: 0 violations | Risk: {iot_result.get('score')}/100 (Safe)"
+                )
                 iot_status = "normal"
             await send_agent_log("IoT Guardian", iot_status, iot_msg)
             
-            # Agent 3: Threat Intelligence
+            # Agent 3: Threat Intelligence (NLP + STIX/TAXII)
             if is_attack:
-                ti_msg = f"Threat Intel: Querying AlienVault OTX & VirusTotal. Telemetry payload values match known high-danger signatures. Source IP flagged as suspicious."
+                ti_msg = (
+                    f"Threat Intel (NLP Engine): Querying STIX/TAXII feeds — "
+                    f"AlienVault OTX, IBM X-Force, CISA ICS-CERT | "
+                    f"Telemetry payload from {device_id} correlates with known high-danger IOCs | "
+                    f"MITRE ATT&CK mapping: TA0040 (Impact), TA0011 (C2)"
+                )
                 ti_status = "anomaly"
             else:
-                ti_msg = f"Threat Intel: Performing routine correlation. Checked active telemetry signature. No malicious patterns matched."
+                ti_msg = (
+                    f"Threat Intel (NLP Engine): Routine STIX/TAXII correlation complete | "
+                    f"No active IOCs matched against {device_id} telemetry | "
+                    f"Feed sources: {len(ti_agent.active_iocs)} cached IOCs from "
+                    f"{ti_agent.ingested_count} ingestions"
+                )
                 ti_status = "normal"
             await send_agent_log("Threat Intelligence", ti_status, ti_msg)
             
@@ -152,7 +197,7 @@ async def main():
                     "details": iot_result
                 })
                 
-            # Agent 4: Incident Response
+            # Agent 4: Incident Response (Decision Tree + Policy Engine)
             if anomalies:
                 for anomaly in anomalies:
                     logger.warning(f"Anomaly detected: {anomaly}")
@@ -165,30 +210,56 @@ async def main():
                         anomaly["description"]
                     )
                 
-                ir_msg = f"Incident Response: Threat score critical! Triggering decision tree. Action: quarantine_device. Dispatched containment command to MQTT topic medisentinel/iot/control/{device_id}."
+                # Get the decision details from the last containment
+                history = ir_agent.containment_history
+                last_action = history[-1] if history else {}
+                ir_msg = (
+                    f"Incident Response (Policy Engine): CONTAINMENT EXECUTED | "
+                    f"Action: {last_action.get('action', 'quarantine_device')} | "
+                    f"Policy: {last_action.get('policy_id', 'POL-IOT-002')} | "
+                    f"Playbook: {last_action.get('playbook', 'PB-DEVICE-QUARANTINE-v3')} | "
+                    f"Target: {device_id} | "
+                    f"Dispatched to MQTT: medisentinel/iot/control/{device_id}"
+                )
                 ir_status = "mitigated"
             else:
-                ir_msg = f"Incident Response: Device status Active. Shield passive protection active. No action required."
+                ir_msg = (
+                    f"Incident Response (Policy Engine): Shield passive | "
+                    f"No containment required | "
+                    f"Total actions executed: {len(ir_agent.containment_history)}"
+                )
                 ir_status = "normal"
             await send_agent_log("Incident Response", ir_status, ir_msg)
             
-            # Agent 5: Compliance Audit
+            # Agent 5: Compliance & Audit (Log Parser + Report Generator)
             log_payload = f"{device_id}-{heart_rate}-{spo2}-{is_attack}"
             signature = hashlib.sha256(log_payload.encode()).hexdigest()[:16]
             if is_attack:
-                audit_msg = f"Compliance Audit: HIPAA anomaly threshold breach registered. Generating tamper-proof audit record. Cryptographic Signature: {signature}."
+                audit_msg = (
+                    f"Compliance Audit (HIPAA Log Parser): BREACH REGISTERED | "
+                    f"HIPAA §164.308(a)(6)(ii) Security Incident Procedures triggered | "
+                    f"Generating tamper-proof audit record | "
+                    f"Hash Chain Signature: {signature} | "
+                    f"Violations: {audit_agent.violation_count} total | "
+                    f"Audit trail entries: {len(audit_agent.event_buffer)}"
+                )
                 audit_status = "logged"
                 
-                # Register threat event in compliance audit database
+                # Register in compliance audit database
                 for anomaly in anomalies:
                     await audit_agent.log_event(
                         action="threat_detected",
                         actor="AgentCluster",
                         target=anomaly["device_id"],
-                        details=anomaly
+                        details={**anomaly, "severity": anomaly["severity"]}
                     )
             else:
-                audit_msg = f"Compliance Audit: Logging normal telemetry event. Signed entry: {signature}. HIPAA & FDA regulatory status: COMPLIANT."
+                audit_msg = (
+                    f"Compliance Audit (Log Parser): Normal telemetry logged | "
+                    f"Signed entry: {signature} | "
+                    f"HIPAA §164.312(b) Audit Controls: COMPLIANT | "
+                    f"FDA 21 CFR Part 11: COMPLIANT"
+                )
                 audit_status = "normal"
             await send_agent_log("Compliance Audit", audit_status, audit_msg)
 

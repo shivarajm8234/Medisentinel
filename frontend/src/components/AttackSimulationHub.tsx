@@ -157,7 +157,8 @@ const AttackSimulationHub: React.FC = () => {
         <AgentCard 
           name="Network Monitor"
           icon={<Network size={20} />}
-          technique="Isolation Forest + LSTM Traffic Sequencing"
+          role="Monitors all inbound/outbound traffic for anomalies and known attack signatures"
+          technique="LSTM + Isolation Forest"
           status={getAgentStatus("Network Monitor")}
           logs={getAgentLogs("Network Monitor")}
         />
@@ -166,7 +167,8 @@ const AttackSimulationHub: React.FC = () => {
         <AgentCard 
           name="IoT Guardian"
           icon={<Cpu size={20} />}
-          technique="Deep Learning Autoencoder Anomaly Mapping"
+          role="Tracks Medical IoT device behavior, flags unusual command patterns or firmware changes"
+          technique="Autoencoder + Rule Engine"
           status={getAgentStatus("IoT Guardian")}
           logs={getAgentLogs("IoT Guardian")}
         />
@@ -175,7 +177,8 @@ const AttackSimulationHub: React.FC = () => {
         <AgentCard 
           name="Threat Intelligence"
           icon={<Activity size={20} />}
-          technique="AlienVault / VirusTotal IOC Verification"
+          role="Continuously ingests external threat feeds and updates local threat signatures"
+          technique="NLP + STIX/TAXII Feeds"
           status={getAgentStatus("Threat Intelligence")}
           logs={getAgentLogs("Threat Intelligence")}
         />
@@ -184,7 +187,8 @@ const AttackSimulationHub: React.FC = () => {
         <AgentCard 
           name="Incident Response"
           icon={<Shield size={20} />}
-          technique="Decision Tree Automation & Direct Port Quarantine"
+          role="Executes autonomous containment — quarantine, block, alert, backup trigger"
+          technique="Decision Tree + Policy Engine"
           status={getAgentStatus("Incident Response")}
           logs={getAgentLogs("Incident Response")}
         />
@@ -193,7 +197,8 @@ const AttackSimulationHub: React.FC = () => {
         <AgentCard 
           name="Compliance Audit"
           icon={<FileCheck size={20} />}
-          technique="Cryptographic Ledger Signature & HIPAA Compliance"
+          role="Maintains logs, generates HIPAA-compliant audit trails, flags policy violations"
+          technique="Log Parser + Report Generator"
           status={getAgentStatus("Compliance Audit")}
           logs={getAgentLogs("Compliance Audit")}
         />
