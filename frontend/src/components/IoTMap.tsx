@@ -68,14 +68,30 @@ const IoTMap: React.FC = () => {
                         key={device.device_id}
                         onClick={() => setSelectedDevice(device)}
                         style={{
-                          width: '40px', height: '40px', borderRadius: '50%', backgroundColor: color,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          cursor: 'pointer', boxShadow: `0 0 15px ${color}88`,
-                          border: selectedDevice?.device_id === device.device_id ? '2px solid white' : 'none'
+                          display: 'flex', alignItems: 'center', gap: '12px',
+                          background: selectedDevice?.device_id === device.device_id ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.3)',
+                          border: `1px solid ${selectedDevice?.device_id === device.device_id ? color : 'rgba(255,255,255,0.05)'}`,
+                          padding: '12px', borderRadius: '8px', cursor: 'pointer',
+                          transition: 'all 0.2s', width: '220px',
+                          boxShadow: selectedDevice?.device_id === device.device_id ? `0 0 15px ${color}44` : 'none'
                         }}
                         title={device.device_id}
                       >
-                        <HeartPulse size={20} color="#000" />
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '50%', backgroundColor: color,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                          boxShadow: `0 0 10px ${color}66`
+                        }}>
+                          <HeartPulse size={16} color="#000" />
+                        </div>
+                        <div style={{ overflow: 'hidden' }}>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {device.device_id}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                            {device.device_type.replace('_', ' ')}
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

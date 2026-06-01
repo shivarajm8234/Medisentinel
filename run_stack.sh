@@ -251,6 +251,9 @@ if [ ! -f .env ]; then
 fi
 
 # Run the stack
+echo "[+] Stopping previous running services..."
+docker compose down
+
 echo "[+] Launching Docker Compose Stack..."
 docker compose up --build -d
 
